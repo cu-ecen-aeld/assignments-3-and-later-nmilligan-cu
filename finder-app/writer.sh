@@ -9,4 +9,4 @@ then
 	exit 1
 fi
 
-mkdir -p $(dirname $writefile) && touch $writefile && echo $writestr > $writefile echo 'Write failed'; exit 1
+mkdir -p $(dirname $writefile) && touch $writefile && echo $writestr > $writefile || echo 'Write failed'; exit 1
