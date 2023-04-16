@@ -55,16 +55,13 @@ bool do_exec(int count, ...)
 	
 	if (pid == 0){
 		err = execv(command[0], command);
-		if (err < 0){
-			printf("returning false");
-			return -1;
-		}
+		exit(err);
 	}
 	
+	waitpid(pid, &status, 0);
 	
-	err = waitpid(pid, &status, 0);
-	if (err < 0){
-			return -1;
+	if (!WIFEXITED(status)){
+		return false;
 	}
 	
     va_end(args);
@@ -100,13 +97,13 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 		dup2(fd, 1);
 		err = execv(command[0], command);
 		if (err < 0){
-			return -1;
+			return 0;
 		}
 	}
 	
 	int err_1 = waitpid(pid, &status, 0);
 	if (err_1 < 0){
-		return -1;
+		return 0;
 	}
 	
     va_end(args);
