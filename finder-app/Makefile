@@ -1,4 +1,4 @@
-CROSS_COMPILE = 
+CC=$(CROSS_COMPILE)gcc
 
 all: writer
 
@@ -7,4 +7,4 @@ clean:
 	-rm -f writer
 	
 writer: writer.o
-	$(CROSS_COMPILE)gcc -o writer writer.c
+	$(CC) $(CFLAGS) -o writer writer.c
