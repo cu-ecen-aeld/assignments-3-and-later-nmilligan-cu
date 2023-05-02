@@ -12,6 +12,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include "read_line.h"
+#include <errno.h>
 
 #define PORT "9000" //connection port
 #define BUF_SIZE 20000
@@ -138,7 +139,7 @@ int main( int argc, char *argv[]){
         peer_addr_len = sizeof peer_addr;
         new_fd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
         if (new_fd == -1) {
-	    syslog(LOG_ERR, "Failed to accept connection");
+	    syslog(LOG_ERR, "Failed to accept connection %i\n", errno);
             perror("accept");
             continue;
         }
