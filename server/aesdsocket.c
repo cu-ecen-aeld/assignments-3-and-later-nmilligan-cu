@@ -138,6 +138,7 @@ int main( int argc, char *argv[]){
         peer_addr_len = sizeof peer_addr;
         new_fd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
         if (new_fd == -1) {
+	    syslog(LOG_Err, "Failed to accept connection");
             perror("accept");
             continue;
         }
