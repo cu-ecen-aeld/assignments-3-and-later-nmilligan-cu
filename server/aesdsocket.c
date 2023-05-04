@@ -60,7 +60,7 @@ int main( int argc, char *argv[]){
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-	s = getaddrinfo("localhost", PORT, &hints, &result);
+	s = getaddrinfo("0.0.0.0", PORT, &hints, &result);
 	if (s != 0) {
 		syslog(LOG_INFO, "Usage: %s host port msg...\n", PORT);
 		exit(-1);
@@ -141,7 +141,8 @@ int main( int argc, char *argv[]){
         if (new_fd == -1) {
 	    syslog(LOG_ERR, "Failed to accept connection %i\n", errno);
             perror("accept");
-            continue;
+	    //continue;
+	    exit(-1);
         }
 
         inet_ntop(peer_addr.ss_family,
