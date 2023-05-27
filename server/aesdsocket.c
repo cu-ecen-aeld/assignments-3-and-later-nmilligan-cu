@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
@@ -13,11 +14,62 @@
 #include <arpa/inet.h>
 #include "read_line.h"
 #include <errno.h>
+#include "queue.h"
+#include <pthread.h>
 
 #define PORT "9000" //connection port
 #define BUF_SIZE 20000
 
 bool caught_int = false;
+
+struct thread_node{
+	pthread_mutex_t *mutex;
+	pthread_t *self;
+	int fd, *data_fd;
+    /**
+     * Set to true if the thread completed with success, false
+     * if an error occurred.
+     */
+    bool thread_complete;
+	TAILQ_ENTRY(thread_node) nodes;
+};
+
+typedef TAILQ_HEAD(head_s, node) head_t;
+
+struct timer_data{
+	pthread_mutex_t *mutex;
+	int *data_fd;
+};
+
+void remove_complete_threads(head_t *head){
+	syslog(LOG_INFO, "Removing complete threads\n");
+	struct thread_node * e = NULL;
+	struct thread_node * next = NULL;
+	TAILQ_FOREACH_SAFE(e, head, nodes, next){
+		if (e->thread_complete == true){
+			syslog(LOG_INFO, "Found complete thread\n");
+			TAILQ_REMOVE(head, e, nodes);
+			pthread_join(*e->self, NULL);
+			free(e);
+			e = NULL;
+		}
+	}
+}
+
+void free_queue(head_t *head){
+	syslog(LOG_INFO, "Freeing linked list\n");
+	struct thread_node * e = NULL;
+	struct thread_node * next = NULL;
+	TAILQ_FOREACH_SAFE(e, head, nodes, next){
+		TAILQ_REMOVE(head, e, nodes);
+		pthread_kill(*e->self, NULL);
+		pthread_join(*e->self, NULL);
+		close(e->fd);
+		free(e);
+		e = NULL;
+	}
+	syslog(LOG_INFO, "Done freeing linked list\n");
+}
 
 static void signal_handler (int signal_num){
 	if (signal_num == SIGINT || signal_num == SIGTERM){
@@ -25,6 +77,62 @@ static void signal_handler (int signal_num){
 		caught_int = true;
 	}
 }
+
+
+void* timer_thread(void* thread_param)
+{
+	struct timer_data* thread_data_args = (struct timer_data *) thread_param;
+	time_t t;
+	struct timespec timer;
+	struct timespec remain;
+	struct tm *tmp;
+	char outstr[200];
+	char stamp[400];
+	
+	syslog(LOG_INFO, "starting timer thread\n");
+	timer.tv_sec = 10;
+	while(!caught_int) { 
+		// sleep
+		clock_nanosleep(CLOCK_MONOTONIC,0, &timer, &remain);
+		t = time(NULL);
+		tmp = localtime(&t);
+		int rc = pthread_mutex_lock(thread_data_args->mutex);
+		if(rc == 0){
+			//format timestamp
+			strftime(outstr, sizeof(outstr), "%a, %d %b %Y %T %z", tmp);
+			sprintf(stamp, "timestamp:%s\n", outstr);
+			pwrite(*thread_data_args->data_fd, stamp, sizeof(stamp), SEEK_END);
+
+			rc = pthread_mutex_unlock(thread_data_args->mutex);
+		}
+	}
+}
+
+
+void* socket_thread(void* thread_param)
+{
+	struct thread_node* thread_data_args = (struct thread_node *) thread_param;
+	char buf[BUF_SIZE];
+	char buf2[BUF_SIZE];
+
+    int rc = pthread_mutex_lock(thread_data_args->mutex);
+    if(rc == 0){
+		
+		ssize_t nread = readLine(thread_data_args->fd, buf, BUF_SIZE);
+        pwrite(*thread_data_args->data_fd, buf, nread, SEEK_END);
+        fsync(*thread_data_args->data_fd);
+        lseek(*thread_data_args->data_fd, 0, SEEK_SET);
+        while ((nread = read(*thread_data_args->data_fd, buf2, BUF_SIZE)) > 0){
+			write(thread_data_args->fd, buf2, nread);
+		}
+        close(thread_data_args->fd);
+
+		rc = pthread_mutex_unlock(thread_data_args->mutex);
+		
+	}
+	thread_data_args->thread_complete = true;
+}
+
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -38,17 +146,18 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main( int argc, char *argv[]){
 	openlog(NULL, 0, LOG_USER);
-	
+	pthread_mutex_t mutex;
 	int status, ret;
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
-	int sfd, new_fd, s, data_fd; 
+	int sfd, s, data_fd;
 	int opt = 1;
 	struct sockaddr_storage peer_addr;
 	socklen_t peer_addr_len;
-	ssize_t nread;
-	char buf[BUF_SIZE];
-	char buf2[BUF_SIZE];
+	//init linked list
+	TAILQ_HEAD(head_s, node) head;
+	TAILQ_INIT(&head);
+	
 	
 	
 	memset(&hints, 0, sizeof(hints));
@@ -134,15 +243,24 @@ int main( int argc, char *argv[]){
     syslog(LOG_INFO, "server: waiting for connections...\n");
     
     data_fd = open("/var/tmp/aesdsocketdata", O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
-
+    pthread_mutex_init(&mutex,NULL);
+    
+    
+    pthread_t t_thread;
+	struct timer_data *timer_param = (struct timer_data *) malloc(sizeof(struct timer_data));
+	timer_param->mutex = &mutex;
+	timer_param->data_fd = &data_fd;
+    
+	int rc = pthread_create(&t_thread, NULL, &timer_thread, (void*) timer_param);
+	
     while(!caught_int) {  // main accept() loop
         peer_addr_len = sizeof peer_addr;
-        new_fd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
+        int new_fd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
         if (new_fd == -1) {
 	    syslog(LOG_ERR, "Failed to accept connection %i\n", errno);
             perror("accept");
-	    //continue;
-	    exit(-1);
+			continue;
+			//exit(-1);
         }
 
         inet_ntop(peer_addr.ss_family,
@@ -150,19 +268,39 @@ int main( int argc, char *argv[]){
             s, sizeof s);
         syslog(LOG_INFO, "Accepted connection from %i \n", s);
         
-        nread = readLine(new_fd, buf, BUF_SIZE);
-        pwrite(data_fd, buf, nread, SEEK_END);
-        fsync(data_fd);
-        lseek(data_fd, 0, SEEK_SET);
-        while ((nread = read(data_fd, buf2, BUF_SIZE)) > 0){
-			write(new_fd, buf2, nread);
+		//handle threads
+		pthread_t thread;
+		
+		struct thread_node *thread_param = (struct thread_node *) malloc(sizeof(struct thread_node));
+		syslog(LOG_INFO, "preparing thread param");
+		thread_param->mutex = &mutex;
+		thread_param->self = &thread;
+		thread_param->thread_complete = false;
+		thread_param->fd = new_fd;
+		thread_param->data_fd = &data_fd;
+		
+		syslog(LOG_INFO, "attempting pthread_create");
+		int rc = pthread_create(&thread, NULL, &socket_thread, (void*) thread_param);
+		syslog(LOG_INFO, "created thread");
+		if(rc != 0){
+			syslog(LOG_ERR, "pthread created failed: %d\n", rc);
+			continue;
 		}
-        close(new_fd);
-
+		// add thread to linked list
+		TAILQ_INSERT_TAIL(&head, thread_param, nodes);
+		thread_param = NULL;
+		
+		// check for complete threads
+		remove_complete_threads(&head);
     }
-    close(new_fd);
-	close(data_fd);
+	
+	
+	pthread_join(&t_thread, NULL);
+	free(timer_param);
+	
+	free_queue(&head);
 	close(sfd);
+	close(data_fd);
 	remove("/var/tmp/aesdsocketdata");
     return 0;
 }

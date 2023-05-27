@@ -7,4 +7,4 @@ clean:
 	-rm -f aesdsocket
 	
 aesdsocket: aesdsocket.o
-	$(CC) $(CFLAGS) -o aesdsocket aesdsocket.c read_line.c
+	$(CC) $(CFLAGS) -pthread -o aesdsocket aesdsocket.c read_line.c
