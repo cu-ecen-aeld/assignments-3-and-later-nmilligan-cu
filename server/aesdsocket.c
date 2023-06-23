@@ -100,8 +100,8 @@ void* timer_thread(void* thread_param)
 		if(rc == 0){
 			//format timestamp
 			strftime(outstr, sizeof(outstr), "%a, %d %b %Y %T %z", tmp);
-			sprintf(stamp, "timestamp:%s\n", outstr);
-			pwrite(*thread_data_args->data_fd, stamp, sizeof(stamp), SEEK_END);
+			int len = sprintf(stamp, "timestamp:%s\n", outstr);
+			pwrite(*thread_data_args->data_fd, stamp, sizeof(len), SEEK_END);
 
 			rc = pthread_mutex_unlock(thread_data_args->mutex);
 		}
