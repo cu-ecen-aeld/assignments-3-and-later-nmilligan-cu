@@ -19,6 +19,13 @@
 
 #define PORT "9000" //connection port
 #define BUF_SIZE 20000
+#define USE_AESD_CHAR_DEVICE 1
+
+#ifdef USE_AESD_CHAR_DEVICE
+char* data_path = "/dev/aesdchar";
+#else
+char* data_path = "/var/tmp/aesdsocketdata";
+#endif
 
 bool caught_int = false;
 
@@ -242,16 +249,17 @@ int main( int argc, char *argv[]){
 
     syslog(LOG_INFO, "server: waiting for connections...\n");
     
-    data_fd = open("/var/tmp/aesdsocketdata", O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
+    data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
     pthread_mutex_init(&mutex,NULL);
     
-    
+    #ifndef USE_AESD_CHAR_DEVICE
     pthread_t t_thread;
 	struct timer_data *timer_param = (struct timer_data *) malloc(sizeof(struct timer_data));
 	timer_param->mutex = &mutex;
 	timer_param->data_fd = &data_fd;
-    
+	
 	int rc = pthread_create(&t_thread, NULL, &timer_thread, (void*) timer_param);
+	#endif
 	
     while(!caught_int) {  // main accept() loop
         peer_addr_len = sizeof peer_addr;
@@ -294,13 +302,18 @@ int main( int argc, char *argv[]){
 		remove_complete_threads(&head);
     }
 	
-	
+	#ifndef USE_AESD_CHAR_DEVICE
 	pthread_join(&t_thread, NULL);
 	free(timer_param);
+	#endif
 	
 	free_queue(&head);
 	close(sfd);
 	close(data_fd);
+	
+	#ifndef USE_AESD_CHAR_DEVICE
 	remove("/var/tmp/aesdsocketdata");
+	#endif
+	
     return 0;
 }

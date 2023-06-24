@@ -1,7 +1,6 @@
 CC ?= $(CROSS_COMPILE)gcc
-CFLAGS ?= -g -Wall
+CFLAGS ?= -g -Wall $(USE_AESD_CHAR_DEVICE)
 LDFLAGS ?= -pthread -lrt
-
 
 all: aesdsocket
 
