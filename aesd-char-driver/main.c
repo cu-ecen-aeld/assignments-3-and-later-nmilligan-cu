@@ -82,9 +82,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     if(rtnentry == NULL || !rtnentry->buffptr || !&rtnentry->buffptr[offset_rtn])
 		goto out;
 		
-	if(*f_pos >= rtnentry->size)
-		goto out;
-	if (*f_pos + count > rtnentry->size)
+	if (rtnentry->size - offset_rtn < count)
 		count = rtnentry->size - offset_rtn;
 		
 	if( copy_to_user(buf, &rtnentry->buffptr[offset_rtn], count)){
