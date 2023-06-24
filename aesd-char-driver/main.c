@@ -29,15 +29,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
 
-void aesd_trim(struct aesd_dev *dev)
-{
-	ssize_t index;
-	struct aesd_buffer_entry *entry;
-	AESD_CIRCULAR_BUFFER_FOREACH(entry,&dev->buffer,index) {
-		kfree(entry->buffptr);
-	}
-}
-
 int aesd_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
@@ -205,7 +196,14 @@ void aesd_cleanup_module(void)
     /**
      * TODO: cleanup AESD specific poritions here as necessary
      */
-	aesd_trim(&aesd_device);
+	uint8_t index = 0;
+	struct aesd_buffer_entry *entry;
+	AESD_CIRCULAR_BUFFER_FOREACH(entry,&aesd_device.buffer,index) {
+		if(entry->buffptr!=NULL){	
+			kfree(entry->buffptr);
+		}
+	}
+	
 	mutex_destroy(&aesd_device.lock);
 	
     unregister_chrdev_region(devno, 1);
