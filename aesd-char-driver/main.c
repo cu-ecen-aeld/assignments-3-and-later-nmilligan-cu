@@ -49,11 +49,6 @@ int aesd_open(struct inode *inode, struct file *filp)
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
     filp->private_data = dev;
     
-    if (mutex_lock_interruptible(&dev->lock))
-		return -ERESTARTSYS;
-	aesd_trim(dev);
-	mutex_unlock(&dev->lock);
-    
     return 0;
 }
 
