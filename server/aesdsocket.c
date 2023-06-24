@@ -32,7 +32,7 @@ bool caught_int = false;
 struct thread_node{
 	pthread_mutex_t *mutex;
 	pthread_t *self;
-	int fd, *data_fd;
+	int fd;
     /**
      * Set to true if the thread completed with success, false
      * if an error occurred.
@@ -45,7 +45,6 @@ typedef TAILQ_HEAD(head_s, node) head_t;
 
 struct timer_data{
 	pthread_mutex_t *mutex;
-	int *data_fd;
 };
 
 void remove_complete_threads(head_t *head){
@@ -95,6 +94,7 @@ void* timer_thread(void* thread_param)
 	struct tm *tmp;
 	char outstr[200];
 	char stamp[400];
+	int data_fd;
 	
 	syslog(LOG_INFO, "starting timer thread\n");
 	timer.tv_sec = 10;
@@ -104,12 +104,13 @@ void* timer_thread(void* thread_param)
 		t = time(NULL);
 		tmp = localtime(&t);
 		int rc = pthread_mutex_lock(thread_data_args->mutex);
+		data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
 		if(rc == 0){
 			//format timestamp
 			strftime(outstr, sizeof(outstr), "%a, %d %b %Y %T %z", tmp);
 			int len = sprintf(stamp, "timestamp:%s\n", outstr);
-			pwrite(*thread_data_args->data_fd, stamp, len, SEEK_END);
-
+			pwrite(data_fd, stamp, len, SEEK_END);
+			close(data_fd);
 			rc = pthread_mutex_unlock(thread_data_args->mutex);
 		}
 	}
@@ -121,19 +122,21 @@ void* socket_thread(void* thread_param)
 	struct thread_node* thread_data_args = (struct thread_node *) thread_param;
 	char buf[BUF_SIZE];
 	char buf2[BUF_SIZE];
+	int data_fd;
 
     int rc = pthread_mutex_lock(thread_data_args->mutex);
+    data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
     if(rc == 0){
 		
 		ssize_t nread = readLine(thread_data_args->fd, buf, BUF_SIZE);
-        pwrite(*thread_data_args->data_fd, buf, nread, SEEK_END);
-        fsync(*thread_data_args->data_fd);
-        lseek(*thread_data_args->data_fd, 0, SEEK_SET);
-        while ((nread = read(*thread_data_args->data_fd, buf2, BUF_SIZE)) > 0){
+        pwrite(data_fd, buf, nread, SEEK_END);
+        fsync(data_fd);
+        lseek(data_fd, 0, SEEK_SET);
+        while ((nread = read(data_fd, buf2, BUF_SIZE)) > 0){
 			write(thread_data_args->fd, buf2, nread);
 		}
         close(thread_data_args->fd);
-
+		close(data_fd);
 		rc = pthread_mutex_unlock(thread_data_args->mutex);
 		
 	}
@@ -157,7 +160,7 @@ int main( int argc, char *argv[]){
 	int status, ret;
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
-	int sfd, s, data_fd;
+	int sfd, s;
 	int opt = 1;
 	struct sockaddr_storage peer_addr;
 	socklen_t peer_addr_len;
@@ -249,14 +252,12 @@ int main( int argc, char *argv[]){
 
     syslog(LOG_INFO, "server: waiting for connections...\n");
     
-    data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
     pthread_mutex_init(&mutex,NULL);
     
     #ifndef USE_AESD_CHAR_DEVICE
     pthread_t t_thread;
 	struct timer_data *timer_param = (struct timer_data *) malloc(sizeof(struct timer_data));
 	timer_param->mutex = &mutex;
-	timer_param->data_fd = &data_fd;
 	
 	int rc = pthread_create(&t_thread, NULL, &timer_thread, (void*) timer_param);
 	#endif
@@ -285,8 +286,7 @@ int main( int argc, char *argv[]){
 		thread_param->self = &thread;
 		thread_param->thread_complete = false;
 		thread_param->fd = new_fd;
-		thread_param->data_fd = &data_fd;
-		
+
 		syslog(LOG_INFO, "attempting pthread_create");
 		int rc = pthread_create(&thread, NULL, &socket_thread, (void*) thread_param);
 		syslog(LOG_INFO, "created thread");
@@ -309,10 +309,9 @@ int main( int argc, char *argv[]){
 	
 	free_queue(&head);
 	close(sfd);
-	close(data_fd);
 	
 	#ifndef USE_AESD_CHAR_DEVICE
-	remove("/var/tmp/aesdsocketdata");
+	remove(data_path);
 	#endif
 	
     return 0;
