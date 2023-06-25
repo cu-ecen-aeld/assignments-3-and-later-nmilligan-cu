@@ -134,13 +134,17 @@ void* socket_thread(void* thread_param)
 		ssize_t nread = readLine(thread_data_args->fd, buf, BUF_SIZE);
 		
 		if (USE_AESD_CHAR_DEVICE && strstr(buf, 'AESDCHAR_IOCSEEKTO:') != NULL){
+			syslog(LOG_INFO, "Received an ioc\n");
 			ptr_x = strtok(buf, ":");
 			ptr_x = strtok(NULL, ",");
 			ptr_y = strtok(NULL, ",");
+			syslog(LOG_INFO, "Values %s, %s\n", ptr_x, ptr_y);
 			
+			syslog(LOG_INFO, "Preparing seekto object.\n");
 			struct aesd_seekto *seek_to = (struct aesd_seekto *) malloc(sizeof(struct aesd_seekto));
 			seek_to->write_cmd = atoi(ptr_x);
 			seek_to->write_cmd_offset = atoi(ptr_y);
+			syslog(LOG_INFO, "Calling ioctl.\n");
 			ioctl(fileno(data_fd), AESDCHAR_IOCSEEKTO, seek_to);
 		}
 		else{
@@ -149,7 +153,7 @@ void* socket_thread(void* thread_param)
 			lseek(data_fd, 0, SEEK_SET);
 		}
 
-		
+		syslog(LOG_INFO, "Writing.\n");
         while ((nread = read(data_fd, buf2, BUF_SIZE)) > 0){
 			write(thread_data_args->fd, buf2, nread);
 		}
