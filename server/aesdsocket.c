@@ -126,6 +126,9 @@ void* socket_thread(void* thread_param)
 	char buf2[BUF_SIZE];
 	int data_fd;
 	char *ptr_x, *ptr_y;
+	char search_str[] = "AESDCHAR_IOCSEEKTO:";
+	int index;
+	bool ioctl_cmd = true;
 
     int rc = pthread_mutex_lock(thread_data_args->mutex);
     data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
@@ -133,7 +136,15 @@ void* socket_thread(void* thread_param)
 		
 		ssize_t nread = readLine(thread_data_args->fd, buf, BUF_SIZE);
 		
-		if (USE_AESD_CHAR_DEVICE && strstr(buf, 'AESDCHAR_IOCSEEKTO:') != NULL){
+		for (index=0; index<strlen(search_str); index++){
+			if (buf[index] != search_str[index]){
+				ioctl_cmd = false;
+				break;
+			}
+		}
+		
+		syslog(LOG_INFO, "Received an ioc\n");
+		if (USE_AESD_CHAR_DEVICE && ioctl_cmd){
 			syslog(LOG_INFO, "Received an ioc\n");
 			ptr_x = strtok(buf, ":");
 			ptr_x = strtok(NULL, ",");
