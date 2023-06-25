@@ -17,9 +17,10 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/slab.h>
 #include "aesdchar.h"
 #include "aesd-circular-buffer.h"
-#include <linux/slab.h>
+#include "aesd_ioctl.h"
 
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
@@ -135,12 +136,84 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		mutex_unlock(&dev->lock);
 		return retval;
 }
+
+long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	int err = 0, index, newpos;
+	int retval = 0;
+	struct aesd_dev *dev = filp->private_data;
+	struct aesd_seekto seek_to;
+	
+	if (_IOC_TYPE(cmd) != AESD_IOC_MAGIC) return -ENOTTY;
+	if (_IOC_NR(cmd) > AESDCHAR_IOC_MAXNR) return -ENOTTY;
+	
+	switch(cmd){
+		
+		case AESDCHAR_IOCSEEKTO:
+			if( copy_from_user(&seek_to, (void __user *) arg, sizeof(struct aesd_seekto)))
+				retval = -EINVAL;
+				break;
+			
+			if((dev->buffer.in_offs - dev->buffer.out_offs) < seek_to.write_cmd && !dev->buffer.full)
+				retval = -EINVAL;
+				break;
+			
+			struct aesd_buffer_entry entry;
+			for(index=0; index<= cmd; index++){
+				entry = dev->buffer.entry[(dev->buffer.out_offs+index)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED];
+				
+				if (index < cmd){
+					newpos += entry.size;
+				}
+				else{
+					if (entry.size < seek_to.write_cmd_offset)
+						retval = -EINVAL;
+						break;
+					newpos += seek_to.write_cmd_offset;
+				}
+			}
+			filp->f_pos = newpos;
+	}
+	
+	return retval;
+	
+}
+
+loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
+{
+	struct aesd_dev *dev = filp->private_data;
+	loff_t newpos;
+	
+	switch(whence){
+		case 0: /*SEEK_SET */
+			newpos = off;
+			break;
+			
+		case 1: /*SEEK_CUR */
+			newpos = filp->f_pos + off;
+			break;
+			
+		case 2: /*SEEK_END */
+			newpos = &dev->entry.size + off;
+			break;
+			
+		default: /* can't happen */
+			return -EINVAL;
+	}
+	if (newpos < 0) return -EINVAL;
+	filp->f_pos = newpos;
+	return newpos;
+}
+
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek =   aesd_llseek,
+    .unlocked_ioctl = aesd_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

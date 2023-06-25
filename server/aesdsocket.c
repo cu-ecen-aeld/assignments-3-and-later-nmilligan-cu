@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <syslog.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -16,6 +17,7 @@
 #include <errno.h>
 #include "queue.h"
 #include <pthread.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 #define PORT "9000" //connection port
 #define BUF_SIZE 20000
@@ -123,15 +125,31 @@ void* socket_thread(void* thread_param)
 	char buf[BUF_SIZE];
 	char buf2[BUF_SIZE];
 	int data_fd;
+	char *ptr_x, *ptr_y;
 
     int rc = pthread_mutex_lock(thread_data_args->mutex);
     data_fd = open(data_path, O_CREAT|O_APPEND|O_RDWR, S_IRWXU);
     if(rc == 0){
 		
 		ssize_t nread = readLine(thread_data_args->fd, buf, BUF_SIZE);
-        pwrite(data_fd, buf, nread, SEEK_END);
-        fsync(data_fd);
-        lseek(data_fd, 0, SEEK_SET);
+		
+		if (USE_AESD_CHAR_DEVICE && strstr(buf, 'AESDCHAR_IOCSEEKTO:') != NULL){
+			ptr_x = strtok(buf, ":");
+			ptr_x = strtok(NULL, ",");
+			ptr_y = strtok(NULL, ",");
+			
+			struct aesd_seekto *seek_to = (struct aesd_seekto *) malloc(sizeof(struct aesd_seekto));
+			seek_to->write_cmd = atoi(ptr_x);
+			seek_to->write_cmd_offset = atoi(ptr_y);
+			ioctl(fileno(data_fd), AESDCHAR_IOCSEEKTO, seek_to);
+		}
+		else{
+			pwrite(data_fd, buf, nread, SEEK_END);
+			fsync(data_fd);
+			lseek(data_fd, 0, SEEK_SET);
+		}
+
+		
         while ((nread = read(data_fd, buf2, BUF_SIZE)) > 0){
 			write(thread_data_args->fd, buf2, nread);
 		}
