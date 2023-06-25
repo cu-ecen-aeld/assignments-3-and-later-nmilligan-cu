@@ -194,8 +194,7 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
 			break;
 			
 		case 2: /*SEEK_END */
-			newpos = &dev->entry.size + off;
-			break;
+			return -EINVAL;
 			
 		default: /* can't happen */
 			return -EINVAL;
