@@ -159,10 +159,10 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				break;
 			
 			struct aesd_buffer_entry entry;
-			for(index=0; index<= cmd; index++){
+			for(index=0; index<= seek_to.write_cmd; index++){
 				entry = dev->buffer.entry[(dev->buffer.out_offs+index)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED];
 				
-				if (index < cmd){
+				if (index < seek_to.write_cmd){
 					newpos += entry.size;
 				}
 				else{
