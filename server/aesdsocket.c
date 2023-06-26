@@ -156,7 +156,7 @@ void* socket_thread(void* thread_param)
 			seek_to->write_cmd = atoi(ptr_x);
 			seek_to->write_cmd_offset = atoi(ptr_y);
 			syslog(LOG_INFO, "Calling ioctl.\n");
-			ioctl(fileno(data_fd), AESDCHAR_IOCSEEKTO, &seek_to);
+			ioctl(fileno(&data_fd), AESDCHAR_IOCSEEKTO, seek_to);
 		}
 		else{
 			pwrite(data_fd, buf, nread, SEEK_END);
