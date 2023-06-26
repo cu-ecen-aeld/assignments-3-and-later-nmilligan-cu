@@ -139,14 +139,17 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
 long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int err = 0, index, newpos;
+	int index, newpos;
 	int retval = 0;
 	struct aesd_dev *dev = filp->private_data;
 	struct aesd_seekto seek_to;
 	
+	PDEBUG("in ioctl before checks");
+	
 	if (_IOC_TYPE(cmd) != AESD_IOC_MAGIC) return -ENOTTY;
 	if (_IOC_NR(cmd) > AESDCHAR_IOC_MAXNR) return -ENOTTY;
 	
+	PDEBUG("preparing switch");
 	switch(cmd){
 		
 		case AESDCHAR_IOCSEEKTO:
@@ -156,13 +159,13 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				retval = -EINVAL;
 				break;
 			}
-			
+
 			if((dev->buffer.in_offs - dev->buffer.out_offs) < seek_to.write_cmd && !dev->buffer.full){
 				PDEBUG("failed full and not enough values check");
 				retval = -EINVAL;
 				break;
 			}
-			
+
 			struct aesd_buffer_entry entry;
 			PDEBUG("about to enter loop");
 			for(index=0; index <= seek_to.write_cmd; index++){
@@ -180,10 +183,10 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				}
 				PDEBUG("end of loop newpos is %lld",newpos);
 				
-			}
-			
-			filp->f_pos = newpos;
-			PDEBUG("final newpos is %lld",filp->f_pos);
+		}
+
+		filp->f_pos = newpos;
+		PDEBUG("final newpos is %lld",filp->f_pos);
 	}
 	
 	return retval;
