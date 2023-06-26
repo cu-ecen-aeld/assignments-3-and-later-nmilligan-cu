@@ -139,7 +139,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
 long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int index, newpos;
+	int index, newpos = 0;
 	int retval = 0;
 	struct aesd_dev *dev = filp->private_data;
 	struct aesd_seekto seek_to;
