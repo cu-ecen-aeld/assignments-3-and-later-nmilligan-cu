@@ -156,7 +156,7 @@ void* socket_thread(void* thread_param)
 			seek_to->write_cmd = atoi(ptr_x);
 			seek_to->write_cmd_offset = atoi(ptr_y);
 			syslog(LOG_INFO, "Calling ioctl.\n");
-			int val = ioctl(&data_fd, AESDCHAR_IOCSEEKTO, seek_to);
+			int val = ioctl(data_fd, AESDCHAR_IOCSEEKTO, seek_to);
 			if(val == -1){
 				syslog(LOG_ERR, "Failed to accept connection %i\n", errno);
 			}
