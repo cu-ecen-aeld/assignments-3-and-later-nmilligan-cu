@@ -150,16 +150,22 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	switch(cmd){
 		
 		case AESDCHAR_IOCSEEKTO:
-			if( copy_from_user(&seek_to, (void __user *) arg, sizeof(struct aesd_seekto)))
+			PDEBUG("ioc");
+			if( copy_from_user(&seek_to, (void __user *) arg, sizeof(struct aesd_seekto))){
+				PDEBUG("copy failed");
 				retval = -EINVAL;
 				break;
+			}
 			
-			if((dev->buffer.in_offs - dev->buffer.out_offs) < seek_to.write_cmd && !dev->buffer.full)
+			if((dev->buffer.in_offs - dev->buffer.out_offs) < seek_to.write_cmd && !dev->buffer.full){
+				PDEBUG("failed full and not enough values check");
 				retval = -EINVAL;
 				break;
+			}
 			
 			struct aesd_buffer_entry entry;
-			for(index=0; index<= seek_to.write_cmd; index++){
+			PDEBUG("about to enter loop");
+			for(index=0; index <= seek_to.write_cmd; index++){
 				entry = dev->buffer.entry[(dev->buffer.out_offs+index)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED];
 				PDEBUG("index %lld with cmd %lld",index,seek_to.write_cmd);
 				if (index < seek_to.write_cmd){
